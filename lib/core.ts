@@ -58,9 +58,17 @@ export function findPackageRoot(startDir: string = __dirname): string {
 
 const CALIBRE_REPO = 'kovidgoyal/calibre';
 const CONFIG_PATH = 'resources/stylelint.js';
-const CACHE_DIR = path.join(__dirname, '../.cache');
-const CACHE_FILE = path.join(CACHE_DIR, 'calibre-stylelint.js');
-const CACHE_INFO_FILE = path.join(CACHE_DIR, 'cache-info.json');
+
+/**
+ * Cache directory for Calibre's config.
+ *
+ * Resolved against the package root rather than `__dirname` so the cache lives
+ * in one place (.cache/ in the project) whether the code runs from `dist/` or
+ * straight from the TypeScript sources.
+ */
+export const CACHE_DIR = path.join(findPackageRoot(), '.cache');
+export const CACHE_FILE = path.join(CACHE_DIR, 'calibre-stylelint.js');
+export const CACHE_INFO_FILE = path.join(CACHE_DIR, 'cache-info.json');
 
 /**
  * Type definitions for the validation results

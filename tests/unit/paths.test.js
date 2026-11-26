@@ -16,7 +16,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { findPackageRoot } from '../../lib/core.ts';
+import { findPackageRoot, CACHE_DIR } from '../../lib/core.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
@@ -56,8 +56,7 @@ describe('findPackageRoot', () => {
       expect(findPackageRoot(nested)).toBe(tempRoot);
     });
 
-    it('terminates and returns an ancestor (or the start) when no package.json exists below it', async () => {
-      const orphan = path.join(tempRoot, 'no-package-json');
+    it('terminates and returns an ancestor (or the start) when no package.json exists below it', async () => {      const orphan = path.join(tempRoot, 'no-package-json');
       await fs.mkdir(orphan, { recursive: true });
       // Move the package.json out of the way for this assertion
       await fs.rm(path.join(tempRoot, 'package.json'));
@@ -66,5 +65,15 @@ describe('findPackageRoot', () => {
       const isSelfOrAncestor = root === orphan || orphan.startsWith(root + path.sep);
       expect(isSelfOrAncestor).toBe(true);
     });
+  });
+});
+
+describe('cache location', () => {
+  it('lives in the package-root .cache directory', () => {
+    expect(CACHE_DIR).toBe(path.join(repoRoot, '.cache'));
+  });
+
+  it('is the same whether the code runs from dist or from the sources', () => {
+    expect(CACHE_DIR).not.toContain(`${path.sep}dist${path.sep}`);
   });
 });
