@@ -22,7 +22,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import JSZip from 'jszip';
-import { glob } from 'glob';
+import { globSync } from 'glob';
 import os from 'os';
 
 // ESM polyfills for __dirname and __filename
@@ -364,7 +364,7 @@ export async function validateCSS(filePath: string, options: ValidationOptions =
  * Validate all CSS files in a directory
  */
 export async function validateDirectory(dirPath: string, options: ValidationOptions = {}): Promise<ValidationResult> {
-  const cssFiles = glob.sync('**/*.css', {
+  const cssFiles = globSync('**/*.css', {
     cwd: dirPath,
     absolute: true
   });
