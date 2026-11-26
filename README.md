@@ -246,6 +246,26 @@ epub-css-validator/
 └── package.json
 ```
 
+### Releasing
+
+Releases are published by CI from a tag on `main`; npm authentication uses
+GitHub OIDC trusted publishing, so no token is stored in the repository.
+
+```bash
+# 1. Bump the version (creates no commit or tag)
+npm version patch --no-git-tag-version
+
+# 2. Commit, merge to main, then tag main
+git commit -am "chore: bump version to x.y.z"
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push github main --follow-tags
+```
+
+The release workflow runs the suite on Node 22 and 24 first, then checks that
+the tag is an ancestor of `main` and matches `package.json`, and only then
+publishes with provenance and creates a GitHub Release with generated notes.
+A tag from a feature branch is rejected.
+
 ## Library Usage
 
 The core validation functions are exported from `lib/core.ts` with full TypeScript type definitions:
