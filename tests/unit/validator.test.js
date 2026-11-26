@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { extractRules, getDefaultRules, validateCSS } from '../../lib/core.ts';
+import { extractRules, getDefaultRules, validateCSS, formatJUnit } from '../../lib/core.ts';
 
 describe('extractRules', () => {
   it('should extract rules from Calibre config format', () => {
@@ -206,5 +206,57 @@ describe('validateCSS with an unusable config', () => {
 
     const result = await validateCSS(cssPath, { config: configPath });
     expect(result.totalErrors).toBe(0);
+  });
+});
+
+describe('formatJUnit', () => {
+  it('should escape quotes and ampersands so the report is valid XML', () => {
+    const result = {
+      totalErrors: 1,
+      totalWarnings: 0,
+      results: [
+        {
+          source: 'stylesheet.css',
+          warnings: [
+            {
+              rule: 'no-duplicate-selectors',
+              line: 2,
+              column: 1,
+              severity: 'error',
+              text: 'Unexpected duplicate selector "p", first used at line 1'
+            }
+          ]
+        }
+      ]
+    };
+
+    const xml = formatJUnit(result, 'book & co.epub');
+
+    expect(xml).toContain('&quot;p&quot;');
+    expect(xml).toContain('name="book &amp; co.epub"');
+    // The attribute value must close at the first quote, i.e. contain no raw "
+    const message = xml.match(/<failure message="([^"]*)" type="[^"]*"/);
+    expect(message).not.toBeNull();
+    expect(message[1]).toBe('Unexpected duplicate selector &quot;p&quot;, first used at line 1');
+    expect(xml).not.toContain('"p"');
+  });
+
+  it('should escape < and > in messages', () => {
+    const result = {
+      totalErrors: 1,
+      totalWarnings: 0,
+      results: [
+        {
+          source: 'stylesheet.css',
+          warnings: [
+            { rule: 'some-rule', line: 1, column: 1, severity: 'error', text: '<style> not allowed' }
+          ]
+        }
+      ]
+    };
+
+    const xml = formatJUnit(result, 'file.epub');
+    expect(xml).toContain('&lt;style&gt; not allowed');
+    expect(xml).not.toContain('<style>');
   });
 });
