@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/lib/core.js",
   "bin": {
-    "epub-css-validator": "./dist/bin/epub-css-validator.js"
+    "epub-css-validator": "dist/bin/epub-css-validator.js"
   },
   "files": [
     "dist/bin",
