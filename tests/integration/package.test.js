@@ -101,7 +101,10 @@ describe('Package Distribution', () => {
       cwd: tempDir,
       encoding: 'utf-8'
     });
-    expect(output.trim()).toBe('0.1.1');
+    const { version } = JSON.parse(
+      await fs.readFile(path.join(rootDir, 'package.json'), 'utf-8')
+    );
+    expect(output.trim()).toBe(version);
   }, 30000); // 30 second timeout for npm install
 
   it('should validate CSS files correctly', async () => {
