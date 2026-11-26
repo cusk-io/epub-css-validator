@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { extractRules, getDefaultRules, validateCSS, formatJUnit } from '../../lib/core.ts';
+import { extractRules, getDefaultRules, validateCSS, formatJUnit, formatJUnitReport, formatJSON } from '../../lib/core.ts';
 
 describe('extractRules', () => {
   it('should extract rules from Calibre config format', () => {
@@ -274,5 +274,96 @@ describe('formatJUnit', () => {
     const xml = formatJUnit(result, 'file.epub');
     expect(xml).toContain('&lt;style&gt; not allowed');
     expect(xml).not.toContain('<style>');
+  });
+});
+
+describe('formatJSON', () => {
+  it('should emit the documented shape without stylelint internals', () => {
+    const result = {
+      totalErrors: 1,
+      totalWarnings: 0,
+      results: [
+        {
+          source: 'book.epub (styles/main.css)',
+          errored: true,
+          warnings: [
+            {
+              line: 3,
+              column: 2,
+              rule: 'block-no-empty',
+              severity: 'error',
+              text: 'Unexpected empty block'
+            }
+          ],
+          _postcssResult: { root: { nodes: [] } }
+        }
+      ]
+    };
+
+    const parsed = JSON.parse(formatJSON(result));
+
+    expect(parsed).toEqual({
+      results: [
+        {
+          source: 'book.epub (styles/main.css)',
+          errored: true,
+          warnings: [
+            {
+              line: 3,
+              column: 2,
+              rule: 'block-no-empty',
+              severity: 'error',
+              text: 'Unexpected empty block'
+            }
+          ]
+        }
+      ]
+    });
+  });
+
+  it('should emit an empty results array when nothing was validated', () => {
+    expect(JSON.parse(formatJSON({ totalErrors: 0, totalWarnings: 0 }))).toEqual({
+      results: []
+    });
+  });
+});
+
+describe('formatJUnitReport', () => {
+  it('should emit one testsuite per CSS source', () => {
+    const xml = formatJUnitReport([
+      {
+        name: 'book.epub',
+        result: {
+          totalErrors: 1,
+          totalWarnings: 0,
+          results: [
+            {
+              source: 'book.epub (styles/a.css)',
+              warnings: [
+                { rule: 'block-no-empty', line: 1, column: 1, severity: 'error', text: 'Unexpected empty block' }
+              ]
+            },
+            {
+              source: 'book.epub (styles/b.css)',
+              warnings: []
+            }
+          ]
+        }
+      }
+    ]);
+
+    expect(xml.match(/<testsuite /g)).toHaveLength(2);
+    expect(xml).toContain('name="book.epub (styles/a.css)"');
+    expect(xml).toContain('name="book.epub (styles/b.css)"');
+    expect(xml).toContain('failures="1"');
+    expect(xml).toContain('failures="0"');
+  });
+
+  it('should emit an empty testsuite for an input with no stylesheets', () => {
+    const xml = formatJUnitReport([
+      { name: 'book.epub', result: { totalErrors: 0, totalWarnings: 0 } }
+    ]);
+
+    expect(xml).toContain('<testsuite name="book.epub" tests="0" failures="0">');
   });
 });

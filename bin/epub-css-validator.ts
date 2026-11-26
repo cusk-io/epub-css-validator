@@ -28,9 +28,11 @@ import {
   validateEPUB,
   updateConfig,
   getCachedConfigInfo,
-  formatJUnit,
+  formatJSON,
+  formatJUnitReport,
   findPackageRoot,
-  type ValidationOptions
+  type ValidationOptions,
+  type ValidationResult
 } from '../lib/core.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -94,46 +96,73 @@ program
         return;
       }
 
+      const format = (options.format || 'text') as string;
+      if (!['text', 'json', 'junit'].includes(format)) {
+        console.error(chalk.red(`Error: Unknown format "${format}". Use text, json or junit.`));
+        process.exit(1);
+      }
+
+      // Machine-readable formats own stdout; progress goes to stderr so the
+      // output can be piped straight into a parser or CI report.
+      const machineReadable = format !== 'text';
+      const progress = machineReadable ? console.error : console.log;
+
       let totalErrors = 0;
       let totalWarnings = 0;
+      const entries: Array<{ name: string; result: ValidationResult }> = [];
+      const allResults: stylelint.LintResult[] = [];
 
       for (const file of files) {
         const filePath = path.resolve(file);
         const ext = path.extname(filePath).toLowerCase();
 
         if (ext === '.epub') {
-          console.log(chalk.blue(`Validating EPUB: ${file}`));
+          progress(chalk.blue(`Validating EPUB: ${file}`));
           const result = await validateEPUB(filePath, options);
+          entries.push({ name: file, result });
           totalErrors += result.totalErrors;
           totalWarnings += result.totalWarnings;
+          if (result.results) {
+            allResults.push(...result.results);
+          }
           // Display EPUB errors if any
-          if (result.totalErrors > 0 || result.totalWarnings > 0) {
+          if (!machineReadable && (result.totalErrors > 0 || result.totalWarnings > 0)) {
             displayErrors(result.results, filePath);
           }
         } else if (ext === '.css') {
-          console.log(chalk.blue(`Validating CSS: ${file}`));
+          progress(chalk.blue(`Validating CSS: ${file}`));
           const result = await validateCSS(filePath, options);
+          entries.push({ name: file, result });
           totalErrors += result.totalErrors;
           totalWarnings += result.totalWarnings;
+          if (result.results) {
+            allResults.push(...result.results);
+          }
           // Display CSS errors if any
-          if (result.totalErrors > 0 || result.totalWarnings > 0) {
+          if (!machineReadable && (result.totalErrors > 0 || result.totalWarnings > 0)) {
             displayErrors(result.results, filePath);
           }
         } else {
-          console.log(chalk.yellow(`Skipping ${file} (not a CSS or EPUB file)`));
+          progress(chalk.yellow(`Skipping ${file} (not a CSS or EPUB file)`));
         }
       }
 
-      // Summary
-      console.log();
-      if (totalErrors === 0 && totalWarnings === 0) {
-        console.log(chalk.green('✓ No CSS errors or warnings found'));
+      if (format === 'json') {
+        process.stdout.write(formatJSON({ totalErrors, totalWarnings, results: allResults }) + '\n');
+      } else if (format === 'junit') {
+        process.stdout.write(formatJUnitReport(entries) + '\n');
       } else {
-        if (totalErrors > 0) {
-          console.log(chalk.red(`✗ ${totalErrors} error(s)`));
-        }
-        if (totalWarnings > 0) {
-          console.log(chalk.yellow(`⚠ ${totalWarnings} warning(s)`));
+        // Summary
+        console.log();
+        if (totalErrors === 0 && totalWarnings === 0) {
+          console.log(chalk.green('✓ No CSS errors or warnings found'));
+        } else {
+          if (totalErrors > 0) {
+            console.log(chalk.red(`✗ ${totalErrors} error(s)`));
+          }
+          if (totalWarnings > 0) {
+            console.log(chalk.yellow(`⚠ ${totalWarnings} warning(s)`));
+          }
         }
       }
 

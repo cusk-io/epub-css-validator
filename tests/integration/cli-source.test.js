@@ -58,4 +58,26 @@ describe('CLI run from TypeScript sources', () => {
     expect(code).toBe(1); // examples/test.css contains known errors
     expect(stdout).toMatch(/block-no-empty/);
   }, 30000);
+
+  it('rejects an unknown output format', async () => {
+    const { stderr, code } = await runFromSource([
+      '--format',
+      'yaml',
+      path.join('examples', 'test.css')
+    ]);
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/Unknown format "yaml"/);
+  }, 30000);
+
+  it('writes only JSON to stdout in json mode', async () => {
+    const { stdout, code } = await runFromSource([
+      '--format',
+      'json',
+      path.join('examples', 'test.css')
+    ]);
+    expect(code).toBe(1); // errors are still signalled through the exit code
+    const report = JSON.parse(stdout);
+    expect(report.results).toHaveLength(1);
+    expect(report.results[0].warnings.length).toBeGreaterThan(0);
+  }, 30000);
 });

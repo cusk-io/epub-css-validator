@@ -127,32 +127,48 @@ describe('Package Distribution', () => {
     expect(output).toContain('error(s)');
   }, 30000); // 30 second timeout for validation
 
-  it('should support all output formats', async () => {
+  it('should emit machine-readable JSON and JUnit reports', async () => {
     const testFile = path.join(rootDir, 'examples', 'test.css');
     const tempTestFile = path.join(tempDir, 'test.css');
     await fs.copyFile(testFile, tempTestFile);
 
-    // Test that format options are accepted (CLI accepts them even if output format handling needs improvement)
-    // Test JSON format - expect exit code 1 (errors found)
+    let jsonOutput;
     try {
       execSync(`npx epub-css-validator --format json ${tempTestFile}`, {
         cwd: tempDir,
         encoding: 'utf-8',
         stdio: 'pipe'
       });
+      throw new Error('expected a non-zero exit code for a file with errors');
     } catch (error) {
       expect(error.status).toBe(1);
+      jsonOutput = error.stdout;
     }
 
-    // Test JUnit format - expect exit code 1 (errors found)
+    const report = JSON.parse(jsonOutput);
+    expect(report.results).toHaveLength(1);
+    expect(report.results[0].warnings.length).toBeGreaterThan(0);
+    expect(report.results[0]).not.toHaveProperty('_postcssResult');
+    // stdout must be pure JSON, with progress messages on stderr
+    expect(jsonOutput).not.toContain('Validating CSS');
+
+    let junitOutput;
     try {
       execSync(`npx epub-css-validator --format junit ${tempTestFile}`, {
         cwd: tempDir,
         encoding: 'utf-8',
         stdio: 'pipe'
       });
+      throw new Error('expected a non-zero exit code for a file with errors');
     } catch (error) {
       expect(error.status).toBe(1);
+      junitOutput = error.stdout;
     }
+
+    expect(junitOutput).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+    expect(junitOutput).toContain('<testsuites>');
+    expect(junitOutput).toContain('<testsuite ');
+    expect(junitOutput).toContain('<failure message=');
+    expect(junitOutput).not.toContain('Validating CSS');
   }, 30000); // 30 second timeout for format tests
 });
