@@ -424,6 +424,18 @@ export async function validateEPUB(epubPath: string, options: ValidationOptions 
 }
 
 /**
+ * Escape a string for use in XML text or a double-quoted attribute value.
+ */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * Format results as JUnit XML
  */
 export function formatJUnit(result: ValidationResult, filePath: string): string {
@@ -443,11 +455,14 @@ export function formatJUnit(result: ValidationResult, filePath: string): string 
     }
   }
 
+  // Stylelint messages routinely contain double quotes (for example
+  // 'Unexpected duplicate selector "p"'), and file paths may contain '&', so
+  // everything interpolated here has to be escaped or the report is not XML.
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="${filePath}" tests="${testCases.length}" failures="${testCases.length}">
-${testCases.map(tc => `    <testcase name="${tc.name}">
-      <failure message="${tc.failure.message}" type="${tc.failure.type}"/>
+  <testsuite name="${escapeXml(filePath)}" tests="${testCases.length}" failures="${testCases.length}">
+${testCases.map(tc => `    <testcase name="${escapeXml(tc.name)}">
+      <failure message="${escapeXml(tc.failure.message)}" type="${escapeXml(tc.failure.type)}"/>
     </testcase>`).join('\n')}
   </testsuite>
 </testsuites>`;
