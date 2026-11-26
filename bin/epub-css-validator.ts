@@ -29,22 +29,32 @@ import {
   updateConfig,
   getCachedConfigInfo,
   formatJUnit,
+  findPackageRoot,
   type ValidationOptions
 } from '../lib/core.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Read version from package.json
-const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
-const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+// Read version from package.json. Resolve the package root by searching rather
+// than assuming a depth, so this works from both `dist/bin` and `bin`.
+let version = '0.0.0';
+try {
+  const packageJsonPath = path.join(findPackageRoot(__dirname), 'package.json');
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+  if (typeof packageJson.version === 'string') {
+    version = packageJson.version;
+  }
+} catch {
+  // Fall back to a placeholder rather than failing the CLI outright
+}
 
 const program = new Command();
 
 program
   .name('epub-css-validator')
   .description('Validate CSS in EPUB files using Calibre\'s stylelint rules')
-  .version(packageJson.version);
+  .version(version);
 
 program
   .argument('[files...]', 'CSS files, directories, or EPUB files to validate')

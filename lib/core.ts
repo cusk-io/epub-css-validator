@@ -18,6 +18,7 @@
 import stylelint from 'stylelint';
 import axios from 'axios';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import JSZip from 'jszip';
@@ -27,6 +28,33 @@ import os from 'os';
 // ESM polyfills for __dirname and __filename
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Find the nearest directory containing a package.json, walking up from
+ * `startDir`.
+ *
+ * Compiled code lives in `dist/lib` or `dist/bin`, so the package root is one
+ * level further away than it is when running from the TypeScript sources.
+ * Resolving it by searching instead of assuming a fixed depth keeps the CLI
+ * working under both layouts.
+ */
+export function findPackageRoot(startDir: string = __dirname): string {
+  const start = path.resolve(startDir);
+  let dir = start;
+
+  for (;;) {
+    if (existsSync(path.join(dir, 'package.json'))) {
+      return dir;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      // Nothing found (e.g. running from a temp directory)
+      return start;
+    }
+    dir = parent;
+  }
+}
 
 const CALIBRE_REPO = 'kovidgoyal/calibre';
 const CONFIG_PATH = 'resources/stylelint.js';
