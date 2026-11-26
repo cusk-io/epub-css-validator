@@ -292,6 +292,19 @@ export function getDefaultRules(): StylelintRules {
 }
 
 /**
+ * Guard against running stylelint with no rules: it would report no problems at
+ * all, which is indistinguishable from a genuinely clean stylesheet.
+ */
+function requireRules(rules: StylelintRules, source: string, hint: string): StylelintRules {
+  if (!rules || Object.keys(rules).length === 0) {
+    throw new Error(
+      `No stylelint rules could be loaded from ${source}, so nothing would be checked. ${hint}`
+    );
+  }
+  return rules;
+}
+
+/**
  * Validate a CSS file (core function - no console output)
  */
 export async function validateCSS(filePath: string, options: ValidationOptions = {}): Promise<ValidationResult> {
@@ -300,11 +313,21 @@ export async function validateCSS(filePath: string, options: ValidationOptions =
   if (options.config) {
     // Use custom config
     const customConfigContent = await fs.readFile(options.config, 'utf-8');
-    config = { rules: extractRules(customConfigContent) };
+    const rules = requireRules(
+      extractRules(customConfigContent),
+      `custom config ${options.config}`,
+      'Provide a config that defines a "rules" object.'
+    );
+    config = { rules };
   } else {
     // Use Calibre's config
     const calibreConfig = await getCachedConfig() || await updateConfig();
-    config = { rules: extractRules(calibreConfig) };
+    const rules = requireRules(
+      extractRules(calibreConfig),
+      `Calibre's stylelint config (cached at ${CACHE_FILE})`,
+      'Run with --update-config to refresh the cached copy.'
+    );
+    config = { rules };
   }
 
   const result = await stylelint.lint({
