@@ -199,6 +199,12 @@ Update the config again. If it persists, use a custom config:
 npx tsx bin/epub-css-validator.ts --config ./my-stylelint.js stylesheet.css
 ```
 
+### "No stylelint rules could be loaded"
+
+The config was found but contained no usable rules, so validation would have
+checked nothing. For Calibre's config, refresh the cache with
+`--update-config`. For a custom config, make sure it exports a `rules` object.
+
 ### Network Issues
 
 Manually download Calibre's config:

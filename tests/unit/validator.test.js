@@ -12,7 +12,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { extractRules, getDefaultRules } from '../../lib/core.ts';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { extractRules, getDefaultRules, validateCSS } from '../../lib/core.ts';
 
 describe('extractRules', () => {
   it('should extract rules from Calibre config format', () => {
@@ -168,5 +171,40 @@ describe('getDefaultRules', () => {
     expect(rules['property-no-unknown']).toBe(true);
     expect(rules['block-no-empty']).toBe(true);
     expect(rules['selector-type-no-unknown']).toEqual([true, { ignore: ['custom-elements'] }]);
+  });
+});
+
+describe('validateCSS with an unusable config', () => {
+  let tempDir;
+  let cssPath;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'epub-css-validator-css-'));
+    cssPath = path.join(tempDir, 'stylesheet.css');
+    await fs.writeFile(cssPath, 'p { color: red; }\n');
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should fail instead of reporting a vacuous pass when the config defines no rules', async () => {
+    const configPath = path.join(tempDir, 'empty-config.js');
+    await fs.writeFile(configPath, 'module.exports = { somethingElse: true };\n');
+
+    await expect(validateCSS(cssPath, { config: configPath })).rejects.toThrow(
+      /No stylelint rules could be loaded/
+    );
+  });
+
+  it('should validate normally when the config defines rules', async () => {
+    const configPath = path.join(tempDir, 'rules-config.js');
+    await fs.writeFile(
+      configPath,
+      "module.exports = { rules: { 'block-no-empty': true } };\n"
+    );
+
+    const result = await validateCSS(cssPath, { config: configPath });
+    expect(result.totalErrors).toBe(0);
   });
 });
