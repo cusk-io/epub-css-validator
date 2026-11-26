@@ -207,6 +207,22 @@ describe('validateCSS with an unusable config', () => {
     const result = await validateCSS(cssPath, { config: configPath });
     expect(result.totalErrors).toBe(0);
   });
+
+  it('should drop unknown-rule warnings from the returned results, not just the counts', async () => {
+    const configPath = path.join(tempDir, 'deprecated-rule-config.js');
+    await fs.writeFile(
+      configPath,
+      "module.exports = { rules: { 'block-no-empty': true, 'no-such-rule-xyz': true } };\n"
+    );
+
+    const result = await validateCSS(cssPath, { config: configPath });
+
+    expect(result.totalErrors).toBe(0);
+    expect(result.totalWarnings).toBe(0);
+    const warnings = (result.results ?? []).flatMap(r => r.warnings);
+    expect(warnings).toHaveLength(0);
+    expect((result.results ?? []).every(r => r.errored === false)).toBe(true);
+  });
 });
 
 describe('formatJUnit', () => {

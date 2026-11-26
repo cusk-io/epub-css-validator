@@ -335,12 +335,20 @@ export async function validateCSS(filePath: string, options: ValidationOptions =
     config: config
   } as stylelint.LinterOptions);
 
-  const output = result.results[0];
+  // Filter out "Unknown rule" warnings (deprecated rules in Calibre's config).
+  // Filter the returned results as well as the counts: the JSON and JUnit
+  // reports are built from these results, so keeping the warnings here would
+  // make them report failures that the summary and exit code do not.
+  const filteredResults = result.results.map(fileResult => {
+    const warnings = fileResult.warnings.filter(w => !w.text.includes('Unknown rule'));
+    return {
+      ...fileResult,
+      warnings,
+      errored: warnings.some(w => w.severity === 'error')
+    };
+  });
 
-  // Filter out "Unknown rule" warnings (deprecated rules in Calibre's config)
-  const filteredWarnings = output && output.warnings
-    ? output.warnings.filter(w => !w.text.includes('Unknown rule'))
-    : [];
+  const filteredWarnings = filteredResults.flatMap(fileResult => fileResult.warnings);
 
   const errorCount = filteredWarnings.filter(w => w.severity === 'error').length;
   const warningCount = filteredWarnings.filter(w => w.severity === 'warning').length;
@@ -348,7 +356,7 @@ export async function validateCSS(filePath: string, options: ValidationOptions =
   return {
     totalErrors: errorCount,
     totalWarnings: warningCount,
-    results: result.results
+    results: filteredResults
   };
 }
 
