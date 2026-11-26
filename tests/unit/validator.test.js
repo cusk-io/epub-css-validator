@@ -81,6 +81,74 @@ describe('extractRules', () => {
       }
     ]);
   });
+
+  it('should extract rules declared with "var rules = {" (current Calibre format)', () => {
+    const config = `/*jshint esversion: 6 */
+(function() {
+"use strict";
+
+window.stylelint_results = [];
+
+window.check_css =  function(src, fix, disabled_rules) {
+    var rules = {
+        'annotation-no-unknown': true,
+        'block-no-empty': true,
+        'declaration-block-no-duplicate-properties': [
+            true,
+            {
+                ignore: ['consecutive-duplicates-with-different-values'],
+            },
+        ],
+        'unit-no-unknown': true,
+    };
+    if (disabled_rules) disabled_rules.forEach((rule) => { if (rule in rules) rules[rule] = null; });
+    stylelint.lint({
+        code: src,
+        fix: fix,
+        config: { rules: rules },
+    });
+};
+document.title = 'ready:' + window.performance.now();
+})();`;
+    const rules = extractRules(config);
+    expect(rules['annotation-no-unknown']).toBe(true);
+    expect(rules['block-no-empty']).toBe(true);
+    expect(rules['unit-no-unknown']).toBe(true);
+    expect(rules['declaration-block-no-duplicate-properties']).toEqual([
+      true,
+      { ignore: ['consecutive-duplicates-with-different-values'] }
+    ]);
+    // The `config: { rules: rules }` reference must not be treated as the rules
+    expect(rules['rules']).toBeUndefined();
+  });
+
+  it('should not stop at braces inside strings or comments', () => {
+    const config = `
+      var rules = {
+        // a comment with an unbalanced } brace
+        'property-no-unknown': true,
+        'selector-type-no-unknown': [true, { ignore: ['weird{selector}'] }],
+        'string-no-newline': true
+      };
+      config = { rules: rules };
+    `;
+    const rules = extractRules(config);
+    expect(rules['property-no-unknown']).toBe(true);
+    expect(rules['string-no-newline']).toBe(true);
+    expect(rules['selector-type-no-unknown']).toEqual([true, { ignore: ['weird{selector}'] }]);
+  });
+
+  it('should ignore an empty rules placeholder and use the populated object', () => {
+    const config = `
+      config: { rules: {} },
+      window.check_css = function() {
+        var rules = { 'block-no-empty': true };
+        stylelint.lint({ config: { rules: rules } });
+      };
+    `;
+    const rules = extractRules(config);
+    expect(rules).toEqual({ 'block-no-empty': true });
+  });
 });
 
 describe('getDefaultRules', () => {

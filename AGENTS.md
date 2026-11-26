@@ -49,7 +49,11 @@ EPUB CSS Validator is a Node.js command-line tool that validates CSS in EPUB fil
 
 ### Calibre Config Parsing
 - Calibre's `stylelint.js` is wrapped in a browser-style IIFE for WebEngine
-- The `extractRules()` function uses bracket-matching to extract the rules object
+- The `extractRules()` function locates the rules object and extracts it with bracket matching that skips strings and comments
+- Two shapes are supported, because Calibre has changed the file over time:
+  - older: `config: { rules: { ... } }`
+  - newer: `var rules = { ... }` followed by `config: { rules: rules }`
+- It must not be fooled by the `rules: rules` reference (no brace after the colon) or by braces inside strings/comments
 - Config is cached locally in `.cache/calibre-stylelint.js`
 - Config metadata stored in `.cache/cache-info.json`
 
@@ -151,6 +155,8 @@ The `extractRules()` function is fragile - it parses Calibre's IIFE-wrapped conf
 - Test with `--update-config` to ensure parsing works
 - Check that rules are extracted correctly
 - Verify the tool still validates CSS properly
+- Run `npm test`: `tests/unit/validator.test.js` covers both upstream shapes (`rules: { ... }` and `var rules = { ... }`), decoy references and braces inside strings/comments
+- A silent fall back to `getDefaultRules()` means most rules stop being checked, so a clean result proves little - watch for the `Could not parse Calibre config` warning
 
 ### Don't Access Deprecated Properties
 ```typescript

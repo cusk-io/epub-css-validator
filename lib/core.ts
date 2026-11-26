@@ -127,60 +127,117 @@ export async function getLatestCalibreVersion(): Promise<string> {
 }
 
 /**
+ * Matches the openings of a rules object literal in Calibre's config.
+ *
+ * Calibre has shipped two shapes over time:
+ *   - older: `config: { rules: { ... } }`
+ *   - newer: `var rules = { ... }` followed by `config: { rules: rules }`
+ *
+ * Both are matched here, and the `rules: rules` reference is not, since it has
+ * no brace directly after the colon.
+ */
+const RULES_OBJECT_PATTERN_SOURCE = '\\brules\\s*[=:]\\s*\\{';
+
+/**
+ * Index of the closing brace matching the brace at `openIndex`, skipping over
+ * string literals and comments so that braces inside them are not counted.
+ * Returns -1 if the object literal is unterminated.
+ */
+function findClosingBrace(source: string, openIndex: number): number {
+  let depth = 0;
+
+  for (let i = openIndex; i < source.length; i++) {
+    const char = source[i];
+    const next = source[i + 1];
+
+    if (char === '/' && next === '/') {
+      const newline = source.indexOf('\n', i + 2);
+      if (newline === -1) return -1;
+      i = newline;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      if (end === -1) return -1;
+      i = end + 1;
+      continue;
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      let j = i + 1;
+      while (j < source.length) {
+        if (source[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (source[j] === char) break;
+        j++;
+      }
+      if (j >= source.length) return -1;
+      i = j;
+      continue;
+    }
+
+    if (char === '{') {
+      depth++;
+    } else if (char === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+
+  return -1;
+}
+
+/**
  * Extract rules from Calibre's config content
  */
 export function extractRules(configContent: string): StylelintRules {
-  try {
-    // Calibre's config is wrapped in a browser-style IIFE
-    // We need to extract the rules object from it
-    // Find the rules section and extract it with proper bracket matching
-    const rulesStart = configContent.indexOf('rules:');
-    if (rulesStart === -1) {
-      return {};
+  // Calibre's config is wrapped in a browser-style IIFE, so walk every
+  // `rules = {` / `rules: {` opening and use the first one that parses into a
+  // non-empty object. Looking for `rules:` alone missed the newer upstream
+  // format, where the rules are declared with `var rules = { ... }` and only
+  // referenced later as `config: { rules: rules }`.
+  const pattern = new RegExp(RULES_OBJECT_PATTERN_SOURCE, 'g');
+  let foundRulesOpening = false;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(configContent)) !== null) {
+    foundRulesOpening = true;
+
+    const openIndex = match.index + match[0].lastIndexOf('{');
+    const closeIndex = findClosingBrace(configContent, openIndex);
+    if (closeIndex === -1) {
+      continue;
     }
 
-    let depth = 0;
-    let inRules = false;
-    let rulesContent = '';
-    let i = rulesStart + 6; // Skip 'rules:'
+    const rulesStr = configContent.slice(openIndex, closeIndex + 1);
 
-    // Find the opening brace
-    while (i < configContent.length && configContent[i] !== '{') {
-      i++;
-    }
-    if (i >= configContent.length) {
-      return {};
-    }
-
-    depth = 1;
-    i++; // Skip the opening brace
-
-    // Extract content until we find the matching closing brace
-    while (i < configContent.length && depth > 0) {
-      const char = configContent[i];
-      if (char === '{') {
-        depth++;
-      } else if (char === '}') {
-        depth--;
-        if (depth === 0) {
-          break;
-        }
+    try {
+      const rules = new Function(`return (${rulesStr});`)() as StylelintRules | null;
+      if (rules && typeof rules === 'object' && !Array.isArray(rules) && Object.keys(rules).length > 0) {
+        return rules;
       }
-      rulesContent += char;
-      i++;
+      // An empty literal (or a non-object) is a decoy such as a nested
+      // `rules: {}` placeholder; keep looking.
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn('Error parsing Calibre rules object:', (error as Error).message);
+      }
     }
-
-    // Parse the rules object safely
-    const rulesStr = `{${rulesContent}}`;
-    const rules = new Function(`return ${rulesStr}`)() as StylelintRules;
-    return rules;
-  } catch (error) {
-    console.warn('Warning: Could not parse Calibre config, using default rules');
-    if (process.env.DEBUG) {
-      console.warn('Error details:', (error as Error).message);
-    }
-    return getDefaultRules();
   }
+
+  if (!foundRulesOpening) {
+    // No rules section at all - nothing to validate against
+    return {};
+  }
+
+  console.warn('Warning: Could not parse Calibre config, using default rules');
+  if (process.env.DEBUG) {
+    console.warn('Error details: no rules object could be extracted from the config');
+  }
+  return getDefaultRules();
 }
 
 /**
