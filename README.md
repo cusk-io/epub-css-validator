@@ -117,6 +117,26 @@ examples/test.css
 }
 ```
 
+### JUnit Format
+
+One `<testsuite>` per stylesheet, so an EPUB with several CSS files reports
+each one separately:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="book.epub (styles/main.css)" tests="1" failures="1">
+    <testcase name="block-no-empty - line 10">
+      <failure message="Unexpected empty block (block-no-empty)" type="error"/>
+    </testcase>
+  </testsuite>
+</testsuites>
+```
+
+With `--format json` or `--format junit`, stdout contains only the report;
+progress messages go to stderr, so redirecting or piping the output is safe.
+The exit code is still 1 when errors are found.
+
 ## Calibre's Rules
 
 Uses the same stylelint configuration as Calibre's Edit Book tool, including:

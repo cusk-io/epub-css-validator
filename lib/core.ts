@@ -444,36 +444,85 @@ function escapeXml(value: string): string {
 }
 
 /**
+ * Build one JUnit <testsuite> element.
+ */
+function renderJUnitSuite(name: string, warnings: stylelint.Warning[]): string {
+  const testCases = warnings.map(warning => ({
+    name: `${warning.rule} - line ${warning.line}`,
+    failure: {
+      message: warning.text,
+      type: warning.severity
+    }
+  }));
+
+  return `  <testsuite name="${escapeXml(name)}" tests="${testCases.length}" failures="${testCases.length}">
+${testCases.map(tc => `    <testcase name="${escapeXml(tc.name)}">
+      <failure message="${escapeXml(tc.failure.message)}" type="${escapeXml(tc.failure.type)}"/>
+    </testcase>`).join('\n')}
+  </testsuite>`;
+}
+
+/**
  * Format results as JUnit XML
  */
 export function formatJUnit(result: ValidationResult, filePath: string): string {
-  const testCases: Array<{ name: string; failure: { message: string; type: string } }> = [];
-
-  if (result.results) {
-    for (const fileResult of result.results) {
-      for (const warning of fileResult.warnings) {
-        testCases.push({
-          name: `${warning.rule} - line ${warning.line}`,
-          failure: {
-            message: warning.text,
-            type: warning.severity
-          }
-        });
-      }
-    }
-  }
+  const warnings = (result.results ?? []).flatMap(fileResult => fileResult.warnings);
 
   // Stylelint messages routinely contain double quotes (for example
   // 'Unexpected duplicate selector "p"'), and file paths may contain '&', so
   // everything interpolated here has to be escaped or the report is not XML.
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="${escapeXml(filePath)}" tests="${testCases.length}" failures="${testCases.length}">
-${testCases.map(tc => `    <testcase name="${escapeXml(tc.name)}">
-      <failure message="${escapeXml(tc.failure.message)}" type="${escapeXml(tc.failure.type)}"/>
-    </testcase>`).join('\n')}
-  </testsuite>
+${renderJUnitSuite(filePath, warnings)}
 </testsuites>`;
+}
 
-  return xml;
+/**
+ * Format the results of several validated inputs as a single JUnit report.
+ *
+ * Each CSS source becomes its own <testsuite>, so an EPUB with several
+ * stylesheets reports per-stylesheet results instead of merging them.
+ */
+export function formatJUnitReport(entries: Array<{ name: string; result: ValidationResult }>): string {
+  const suites: string[] = [];
+
+  for (const entry of entries) {
+    const results = entry.result.results ?? [];
+    if (results.length === 0) {
+      suites.push(renderJUnitSuite(entry.name, []));
+      continue;
+    }
+
+    for (const fileResult of results) {
+      suites.push(renderJUnitSuite(fileResult.source || entry.name, fileResult.warnings));
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+${suites.join('\n')}
+</testsuites>`;
+}
+
+/**
+ * Format results as JSON.
+ *
+ * Stylelint's raw LintResults carry a `_postcssResult` with the entire parsed
+ * syntax tree, so they are reduced to the documented shape: source, errored
+ * and the warning fields callers can act on.
+ */
+export function formatJSON(result: ValidationResult): string {
+  const results = (result.results ?? []).map(fileResult => ({
+    source: fileResult.source ?? '',
+    errored: fileResult.warnings.some(w => w.severity === 'error'),
+    warnings: fileResult.warnings.map(w => ({
+      line: w.line,
+      column: w.column,
+      rule: w.rule,
+      severity: w.severity,
+      text: w.text
+    }))
+  }));
+
+  return JSON.stringify({ results }, null, 2);
 }
