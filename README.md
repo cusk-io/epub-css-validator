@@ -7,7 +7,7 @@ A command-line tool to validate CSS in EPUB files using the same [stylelint](htt
 ## Features
 
 - ✅ Automatically fetches and updates Calibre stylelint rules from GitHub
-- ✅ Validates CSS files, directories, or EPUB files
+- ✅ Validates CSS files or EPUB files (directory validation is in the library API)
 - ✅ Multiple output formats (text, JSON, JUnit XML)
 - ✅ Custom configuration support
 - ✅ Easy CI/CD integration
@@ -27,30 +27,29 @@ npx epub-css-validator book.epub
 
 ### Requirements
 
-- Node.js 18.0.0 or higher
+- Node.js 20.19.0 or higher
 - npm (comes with Node.js)
 
 ## Quick Start
 
 ```bash
-# Install
-cd epub-css-validator
-npm install
+# Validate a stylesheet or an EPUB (no install needed)
+npx epub-css-validator stylesheet.css
+npx epub-css-validator book.epub
 
-# Update Calibre's rules
-npm run update-config
-
-# Validate files
-npx tsx bin/epub-css-validator.ts examples/test.css
-npx tsx bin/epub-css-validator.ts book.epub
+# Calibre's rules are fetched and cached automatically on first run.
+# Refresh them at any time with:
+npx epub-css-validator --update-config
 ```
+
+The exit code is `0` when no errors are found, `1` when errors are found or the
+run fails, so the command can gate CI directly.
 
 ## Usage
 
 ```bash
 # Basic validation (after npm install -g)
 epub-css-validator stylesheet.css
-epub-css-validator ./styles/
 epub-css-validator book.epub
 
 # Or use npx without installation
@@ -58,10 +57,12 @@ npx epub-css-validator stylesheet.css
 
 # Options
 -f, --format <format>    Output: text, json, junit (default: text)
--u, --update-config      Update Calibre's config from GitHub
+-u, --update-config      Refresh Calibre's config from GitHub
 -c, --config <path>      Use custom config file
--v, --verbose            Verbose output
+-v, --verbose            Print stack traces when a run fails
 --cache-info             Show cached config info
+-V, --version            Print the version
+-h, --help               Show help
 ```
 
 ### Examples
@@ -87,10 +88,10 @@ epub-css-validator --config ./my-stylelint.js stylesheet.css
 ```
 Validating CSS: examples/test.css
 
-examples/test.css
-  10:1  ✖  Unexpected empty block                        block-no-empty
-  15:5  ✖  Unexpected unknown property "adobe-hyphenate"  property-no-unknown
-  21:1  ✖  Unexpected unknown type selector "toc1"        selector-type-no-unknown
+/path/to/examples/test.css
+  9:14  ✖  Unexpected empty block (block-no-empty)  block-no-empty
+  14:5  ✖  Unexpected unknown property "adobe-hyphenate" (property-no-unknown)  property-no-unknown
+  19:1  ✖  Unexpected unknown type selector "toc1" (selector-type-no-unknown)  selector-type-no-unknown
 
 ✗ 3 error(s)
 ```
@@ -101,15 +102,15 @@ examples/test.css
 {
   "results": [
     {
-      "source": "examples/test.css",
+      "source": "/path/to/examples/test.css",
       "errored": true,
       "warnings": [
         {
-          "line": 10,
-          "column": 1,
+          "line": 9,
+          "column": 14,
           "rule": "block-no-empty",
           "severity": "error",
-          "text": "Unexpected empty block"
+          "text": "Unexpected empty block (block-no-empty)"
         }
       ]
     }
@@ -126,7 +127,7 @@ each one separately:
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
   <testsuite name="book.epub (styles/main.css)" tests="1" failures="1">
-    <testcase name="block-no-empty - line 10">
+    <testcase name="block-no-empty - line 9">
       <failure message="Unexpected empty block (block-no-empty)" type="error"/>
     </testcase>
   </testsuite>
@@ -162,6 +163,8 @@ See [Calibre's stylelint.js](https://github.com/kovidgoyal/calibre/blob/master/r
 
 ### GitHub Actions
 
+No checkout of this project is needed — the published CLI is installed by `npx`:
+
 ```yaml
 name: Validate EPUB CSS
 on: [push, pull_request]
@@ -169,28 +172,29 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "18"
-      - run: |
-          cd epub-css-validator
-          npm install
-          npm run update-config
-          npx tsx bin/epub-css-validator.ts --format json book.epub
+          node-version: 22
+      - run: npx epub-css-validator book.epub
+```
+
+The step fails the job when errors are reported (exit code 1). For a JUnit
+report instead:
+
+```yaml
+      - run: npx epub-css-validator --format junit book.epub > report.xml
 ```
 
 ### GitLab CI
 
 ```yaml
 validate-css:
-  image: node:18
+  image: node:22
   script:
-    - cd epub-css-validator
-    - npm install
-    - npm run update-config
-    - npx tsx bin/epub-css-validator.ts --format junit book.epub > report.xml
+    - npx epub-css-validator --format junit book.epub > report.xml
   artifacts:
+    when: always
     reports:
       junit: report.xml
 ```
@@ -199,16 +203,17 @@ validate-css:
 
 ### "command not found: node"
 
-Install Node.js from <https://nodejs.org/> (version 18.0.0+ required).
+Install Node.js from <https://nodejs.org/> (version 20.19.0+ required).
 
 ### "Cannot find module"
 
-Run `npm install` in the epub-css-validator directory.
+For a local checkout, run `npm install`. If the CLI is installed globally,
+reinstall it with `npm install -g epub-css-validator`.
 
 ### "No cached config found"
 
 ```bash
-npm run update-config
+epub-css-validator --update-config
 ```
 
 ### "Could not parse Calibre config"
@@ -216,7 +221,7 @@ npm run update-config
 Update the config again. If it persists, use a custom config:
 
 ```bash
-npx tsx bin/epub-css-validator.ts --config ./my-stylelint.js stylesheet.css
+epub-css-validator --config ./my-stylelint.js stylesheet.css
 ```
 
 ### "No stylelint rules could be loaded"
@@ -227,21 +232,35 @@ checked nothing. For Calibre's config, refresh the cache with
 
 ### Network Issues
 
-Manually download Calibre's config:
+Calibre's rules are cached next to the installed package, and
+`epub-css-validator --cache-info` prints the exact path. If GitHub is
+unreachable, place a copy there manually:
 
 1. Download from <https://github.com/kovidgoyal/calibre/blob/master/resources/stylelint.js>
-2. Save to `.cache/calibre-stylelint.js`
-3. Create `.cache/cache-info.json`: `{"version":"manual","cachedAt":"2024-01-01T00:00:00.000Z","path":".cache/calibre-stylelint.js"}`
+2. Save it in the directory printed by `--cache-info` as `calibre-stylelint.js`
+3. Create `cache-info.json` in the same directory: `{"version":"manual","cachedAt":"2024-01-01T00:00:00.000Z","path":"calibre-stylelint.js"}`
 
 ## Development
 
+```bash
+git clone https://github.com/cusk-io/epub-css-validator.git
+cd epub-css-validator
+npm install
+npm run update-config
+npx tsx bin/epub-css-validator.ts examples/test.css
+npm run type-check
+npm run test:run
+```
+
 ```
 epub-css-validator/
+├── .github/workflows/           # CI and tag-driven release
 ├── bin/epub-css-validator.ts    # CLI entry point
 ├── lib/core.ts                  # Core validation logic (library-ready)
+├── tests/                       # Unit and integration tests
 ├── config/stylelintrc.js        # Example custom config
 ├── examples/test.css            # Test file
-├── .cache/                      # Cached Calibre config
+├── .cache/                      # Cached Calibre config (gitignored)
 ├── tsconfig.json                # TypeScript configuration
 └── package.json
 ```
@@ -255,27 +274,37 @@ GitHub OIDC trusted publishing, so no token is stored in the repository.
 # 1. Bump the version (creates no commit or tag)
 npm version patch --no-git-tag-version
 
-# 2. Commit, merge to main, then tag main
+# 2. Commit and merge to main, then tag the merge commit
 git commit -am "chore: bump version to x.y.z"
 git tag -a vX.Y.Z -m "vX.Y.Z"
-git push github main --follow-tags
+git push github main
+git push github vX.Y.Z
 ```
 
-The release workflow runs the suite on Node 22 and 24 first, then checks that
-the tag is an ancestor of `main` and matches `package.json`, and only then
-publishes with provenance and creates a GitHub Release with generated notes.
-A tag from a feature branch is rejected.
+This repository calls the shared `npm-publish` workflow from
+[`cusk-io/.github`](https://github.com/cusk-io/.github); it runs the suite on
+Node 22 and 24 first, then checks that the tag is an ancestor of `main` and
+matches `package.json`, and only then publishes with provenance and creates a
+GitHub Release with generated notes. A tag from a feature branch is rejected.
 
 ## Library Usage
 
-The core validation functions are exported from `lib/core.ts` with full TypeScript type definitions:
+The package is ESM-only and exports its core validation functions with
+TypeScript definitions:
 
 ```typescript
-import { validateCSS, validateEPUB, type ValidationResult } from './lib/core.ts';
+import { validateCSS, validateEPUB, validateDirectory } from 'epub-css-validator';
 
-const result: ValidationResult = await validateCSS('stylesheet.css', {});
+const result = await validateCSS('stylesheet.css');
 console.log(`Errors: ${result.totalErrors}, Warnings: ${result.totalWarnings}`);
+
+// Directory validation and EPUB validation are library-only conveniences
+const all = await validateDirectory('./styles');
+const book = await validateEPUB('book.epub');
 ```
+
+`validateCSS` and `validateEPUB` return the raw stylelint `results` alongside
+the counts; `validateDirectory` returns aggregate counts only.
 
 ## Contributing
 
