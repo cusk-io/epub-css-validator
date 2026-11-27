@@ -287,6 +287,12 @@ Node 22 and 24 first, then checks that the tag is an ancestor of `main` and
 matches `package.json`, and only then publishes with provenance and creates a
 GitHub Release with generated notes. A tag from a feature branch is rejected.
 
+The `v*` tag namespace is protected by a repository ruleset: only repository
+admins can create, move, or delete release tags, so a published tag always
+points at the commit whose artifact is on the registry. Token-based publishing
+is disabled on npm as well, leaving OIDC trusted publishing as the only
+non-interactive path.
+
 ## Library Usage
 
 The package is ESM-only and exports its core validation functions with
